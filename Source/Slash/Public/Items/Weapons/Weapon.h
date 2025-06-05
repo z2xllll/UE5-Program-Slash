@@ -18,7 +18,7 @@ class SLASH_API AWeapon : public AItem
 	GENERATED_BODY()
 public:
 	AWeapon();
-	void Equip(USceneComponent* InParent, FName InSocketName);
+	void Equip(USceneComponent* InParent, FName InSocketName,AActor* NewActor,APawn* NewInstigater);
 	void AttachMeshToSocket(USceneComponent* InParent, const FName& InSocketName);
 protected:
 	virtual void BeginPlay() override;
@@ -31,6 +31,9 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void CreateFields(const FVector& FieldLocation);
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Properties")
+	float Damage=20.f;
 	
 private:
 	UPROPERTY(EditAnywhere, Category = "Weapon Properties")

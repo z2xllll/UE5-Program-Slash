@@ -20,9 +20,12 @@ protected:
 	virtual void BeginPlay() override;
 
 	/*
-	* Paly Montage functions
+	* Play Montage functions
 	*/
 	void PlayHitReactMontage(const FName& SectionName);
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsAlive = true;
 
 private:
 
@@ -36,6 +39,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Montages")
 	UAnimMontage* HitReactMontage;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Montages")
+	UAnimMontage* DeathMontage;
+
 	UPROPERTY(EditAnywhere, Category = "Sounds")
 	USoundBase* HitSound;
 
@@ -45,12 +51,22 @@ private:
 	UPROPERTY(VisibleAnywhere)
 	class UHealthBarComponent* HealthBarWidget;
 
+	UPROPERTY()
+	AActor* CombatTarget;
+
+	UPROPERTY(EditAnywhere)
+	double CombatRadius = 500.0f;
+
 public:	
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetHit_Implementation(const FVector& ImpactPoint) override;
 
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
 	void DirectionalHitReact(const FVector& ImpactPoint);
+
+	void Die();
 
 };

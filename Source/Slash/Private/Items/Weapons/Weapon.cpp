@@ -8,6 +8,7 @@
 #include "Interfaces/HitInterface.h"
 #include "Items/Treasure.h"
 #include "NiagaraComponent.h"
+#include "Enemy/Enemy.h"
 
 AWeapon::AWeapon()
 {
@@ -32,8 +33,10 @@ void AWeapon::BeginPlay()
 	WeaponBox->OnComponentBeginOverlap.AddDynamic(this, &AWeapon::OnBoxOverlap);
 }
 
-void AWeapon::Equip(USceneComponent* InParent, FName InSocketName)
+void AWeapon::Equip(USceneComponent* InParent, FName InSocketName,AActor* NewActor, APawn* NewInstigater)
 {
+	SetOwner(NewActor); //设置武器的拥有者
+	SetInstigator(NewInstigater); //设置武器的施法者
 	ItemState = EItemState::EIS_Equipped;
 	AttachMeshToSocket(InParent, InSocketName);
 	if (EquipSound)
@@ -78,8 +81,11 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
     const FVector Start = BoxTraceStart->GetComponentLocation();
     const FVector End = BoxTraceEnd->GetComponentLocation();
     TArray<AActor*> ActorsToIgnore;
-    ActorsToIgnore.Add(this);
-
+    ActorsToIgnore.AddUnique(this);
+    for(auto &Actor: IgnoreActors)
+    {
+        ActorsToIgnore.AddUnique(Actor);
+	}
 
     FHitResult BoxHit;
     bool bHit = UKismetSystemLibrary::BoxTraceSingle(
@@ -99,10 +105,22 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
         AActor* HitActor = BoxHit.GetActor();
         bool bAlreadyIgnored = IgnoreActors.Contains(HitActor);
 
-        if (bAlreadyIgnored)
+        if (bAlreadyIgnored||HitActor==nullptr)
         {
             return; // 如果已经在列表中，直接返回
         }
+
+		if (HitActor->IsA<AEnemy>())
+		{
+			//如果是敌人，应用伤害
+			UGameplayStatics::ApplyDamage(
+				HitActor,
+				Damage,
+				GetInstigator()->GetController(),
+				this,
+				UDamageType::StaticClass()
+			);
+		}
 
         IHitInterface* HitInterface = Cast<IHitInterface>(HitActor);
         if (HitInterface)
@@ -112,6 +130,7 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
 
         CreateFields(BoxHit.ImpactPoint);
 
+		IgnoreActors.AddUnique(HitActor); // 将击中的Actor添加到忽略列表中
 }
 
 
