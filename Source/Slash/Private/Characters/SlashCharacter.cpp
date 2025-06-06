@@ -32,7 +32,7 @@ ASlashCharacter::ASlashCharacter()
 void ASlashCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	Tags.Add(FName("SlashCharacter"));//添加标签，方便检测角色类型
 }
 
 void ASlashCharacter::MoveForward(float Value)

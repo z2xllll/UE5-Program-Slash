@@ -5,11 +5,14 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Perception/PawnSensingComponent.h"
 #include "Slash/Public/DebugMacros.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/AttributeComponent.h"
 #include "HUD/HealthBarComponent.h"
+#include "AIController.h"
+#include "Navigation/PathFollowingComponent.h"
 
 AEnemy::AEnemy()
 {
@@ -30,12 +33,27 @@ AEnemy::AEnemy()
 
 	GetCharacterMovement()->bOrientRotationToMovement = true; //角色朝向移动方向
 
+	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
+	PawnSensing->SetPeripheralVisionAngle(45.f); //设置感知角度为90度
+	PawnSensing->SightRadius = 2000.f; //设置感知半径为1000单位
 }
 
 void AEnemy::BeginPlay()
 {
 	Super::BeginPlay();
-	HealthBarWidget->SetVisibility(false); //初始隐藏血条
+	if(HealthBarWidget)
+	{
+		HealthBarWidget->SetVisibility(false); //初始隐藏血条
+	}
+	EnemyController = Cast<AAIController>(GetController()); //获取AI控制器
+	MoveToTarget(PatrolTarget); //开始巡逻
+
+	if (PawnSensing)
+	{
+		//设置感知事件
+		PawnSensing->OnSeePawn.AddDynamic(this, &AEnemy::PawnSeen); //绑定感知事件
+	}
+	GetCharacterMovement()->MaxWalkSpeed = 150.f;
 }
 
 void AEnemy::PlayHitReactMontage(const FName& SectionName)
@@ -48,27 +66,110 @@ void AEnemy::PlayHitReactMontage(const FName& SectionName)
 	}
 }
 
+bool AEnemy::InTargetRange(AActor* Target,double Radius)
+{
+	if (!Target) return false; //如果目标为空, 则返回false
+	const double DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+	return DistanceToTarget <= Radius; //如果目标距离小于等于半径, 则返回true
+}
+
+void AEnemy::MoveToTarget(AActor* Target)
+{
+	if (!Target) return; //如果目标为空, 则返回
+	if (EnemyController)
+	{
+		FAIMoveRequest MoveRequest;
+		MoveRequest.SetGoalActor(Target); //设置巡逻目标
+		MoveRequest.SetAcceptanceRadius(20.f); //设置接受半径, 20单位
+		EnemyController->MoveTo(MoveRequest); //开始移动到巡逻目标
+	}
+}
+
+void AEnemy::PawnSeen(APawn* SeenPawn)
+{
+	if (EnemyState == EEnemyState::EES_Chasing) return; //如果敌人状态为追击, 则不处理感知事件
+	if (SeenPawn->ActorHasTag(FName("SlashCharacter")))
+	{
+		EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为攻击
+		GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
+		CombatTarget = SeenPawn; //设置战斗目标为被感知的角色
+		MoveToTarget(CombatTarget); //移动到战斗目标
+	}
+}
+
+void AEnemy::PatrolTimerFinished()
+{
+	MoveToTarget(PatrolTarget); //巡逻计时器结束后, 移动到巡逻目标
+}
+
 void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (!bIsAlive) return; //如果敌人已经死亡, 则不执行其他逻辑
 
 	if (CombatTarget)
 	{
-		const double DistanceToTarget = FVector::Dist(GetActorLocation(), CombatTarget->GetActorLocation());
-		if (DistanceToTarget>CombatRadius||!bIsAlive)
+		if (!InTargetRange(CombatTarget,CombatRadius))
 		{
+			//停止之前的移动
+			if (EnemyController)
+			{
+				EnemyController->StopMovement();
+			}
 			CombatTarget = nullptr; //如果目标距离过远, 则清除战斗目标
+			EnemyState = EEnemyState::EES_Patrolling; //设置敌人状态为巡逻
+            GetCharacterMovement()->MaxWalkSpeed = 150.f; // 设置巡逻速度
 			if (HealthBarWidget)
 			{
 				HealthBarWidget->SetVisibility(false); //隐藏血条
 			}
+			MoveToTarget(PatrolTarget);
 		}
-		else
+		else if(!InTargetRange(CombatTarget,AttackRadius)&&InTargetRange(CombatTarget,CombatRadius))
 		{
+			EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为追击
+			GetCharacterMovement()->MaxWalkSpeed = 300.f; // 设置追击速度
+			if (HealthBarWidget)
+			{
+				HealthBarWidget->SetVisibility(true); //显示血条
+			}
+			MoveToTarget(CombatTarget); //移动到战斗目标
+		}
+		else if (InTargetRange(CombatTarget, AttackRadius))
+		{
+			EnemyState = EEnemyState::EES_Attacking; //设置敌人状态为攻击
 			if(HealthBarWidget)
 			{
 				HealthBarWidget->SetVisibility(true); //显示血条
 			}
+		}
+	}
+	else if(EnemyState!= EEnemyState::EES_Patrolling)
+	{
+		//如果没有战斗目标, 则设置敌人状态为巡逻
+		EnemyState = EEnemyState::EES_Patrolling; //设置敌人状态为巡逻
+		GetCharacterMovement()->MaxWalkSpeed = 150.f; // 设置巡逻速度
+		if (HealthBarWidget)
+		{
+			HealthBarWidget->SetVisibility(false); //隐藏血条
+		}
+	}
+	if (EnemyState == EEnemyState::EES_Patrolling)
+	{
+		if (PatrolTargets.Num() == 0) return;
+
+		// 检查是否需要选择新的巡逻目标
+		if ((!PatrolTarget || !GetWorldTimerManager().IsTimerActive(PatrolTimer))&& !(EnemyController->GetMoveStatus() == EPathFollowingStatus::Moving))
+		{
+			const int32 TargetIndex = FMath::RandRange(0, PatrolTargets.Num() - 1);
+			PatrolTarget = PatrolTargets[TargetIndex];
+			GetWorldTimerManager().SetTimer(
+				PatrolTimer,
+				this,
+				&AEnemy::PatrolTimerFinished,
+				3.f
+			);
+
 		}
 	}
 }
