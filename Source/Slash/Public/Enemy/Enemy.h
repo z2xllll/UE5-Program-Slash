@@ -2,15 +2,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
-#include "Interfaces/HitInterface.h"
+#include "Characters/BaseCharacter.h"
 #include "Characters/CharacterTypes.h"
 #include "Enemy.generated.h"
 
-class UAnimMontage;
 
 UCLASS()
-class SLASH_API AEnemy : public ACharacter, public IHitInterface
+class SLASH_API AEnemy : public ABaseCharacter
 {
 	GENERATED_BODY()
 
@@ -20,10 +18,8 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	/*
-	* Play Montage functions
-	*/
-	void PlayHitReactMontage(const FName& SectionName);
+	void HideHealthBar();
+
 
 	bool InTargetRange(AActor* Target,double Radius);
 
@@ -32,37 +28,23 @@ protected:
 	UFUNCTION()
 	void PawnSeen(APawn* SeenPawn); // Called when the PawnSensing component detects a pawn
 
-	UPROPERTY(BlueprintReadOnly)
-	bool bIsAlive = true;
-
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite,Category = "AI Navigation")
 	AActor* PatrolTarget;
 
+	UPROPERTY(BlueprintReadOnly)
 	EEnemyState EnemyState = EEnemyState::EES_Patrolling;
+
+	virtual void Attack() override;
+	virtual void PlayAttackMontage() override;
 
 private:
 
-	UPROPERTY(VisibleAnywhere)
-	class UAttributeComponent* Attributes;
 
 	UPROPERTY(VisibleAnywhere)
 	class UPawnSensingComponent* PawnSensing;
 
-	/*
-	* Animation Montage for the enemy's Hit Reaction
-	*/
-
-	UPROPERTY(EditDefaultsOnly, Category = "Montages")
-	UAnimMontage* HitReactMontage;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Montages")
-	UAnimMontage* DeathMontage;
-
-	UPROPERTY(EditAnywhere, Category = "Sounds")
-	USoundBase* HitSound;
-
-	UPROPERTY(EditAnywhere, Category = "VisualEffects")
-	UParticleSystem* HitParticles;
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<class AWeapon> WeaponClass;
 
 	UPROPERTY(VisibleAnywhere)
 	class UHealthBarComponent* HealthBarWidget;
@@ -94,13 +76,19 @@ private:
 public:	
 	virtual void Tick(float DeltaTime) override;
 
+	void StartChasing();
+
+	void StartPatrolling();
+
+	void ShowHealthBar();
+
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetHit_Implementation(const FVector& ImpactPoint) override;
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
-	void DirectionalHitReact(const FVector& ImpactPoint);
+	virtual void Destroyed() override;
 
-	void Die();
+	virtual void Die() override;
 
 };
