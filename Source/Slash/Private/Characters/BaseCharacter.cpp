@@ -4,6 +4,7 @@
 #include "Items/Weapons/Weapon.h"
 #include "Components/BoxComponent.h"
 #include "Components/AttributeComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -33,6 +34,11 @@ void ABaseCharacter::AttackEnd()
 
 }
 
+bool ABaseCharacter::IsAlive()
+{
+	return Attributes && Attributes->IsAlive();
+}
+
 void ABaseCharacter::PlayHitReactMontage(const FName& SectionName)
 {
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
@@ -50,7 +56,32 @@ void ABaseCharacter::Die()
 
 void ABaseCharacter::PlayAttackMontage()
 {
+	if(AttackMontage == nullptr || AttackMontageSections.Num() == 0)
+	{
+		return;
+	}
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance)
+	{
+		int32 Selection = FMath::RandRange(0, AttackMontageSections.Num() - 1);
+		FName SectionName = AttackMontageSections[Selection];
+		AnimInstance->Montage_Play(AttackMontage, AttackRate);
+		AnimInstance->Montage_JumpToSection(SectionName, AttackMontage);
+	}
+}
 
+void ABaseCharacter::PlayDeathMontage()
+{
+	if (DeathMontage == nullptr)
+	{
+		return;
+	}
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance)
+	{
+		AnimInstance->Montage_Play(DeathMontage);
+		AnimInstance->Montage_JumpToSection(FName("Death"), DeathMontage);
+	}
 }
 
 void ABaseCharacter::DirectionalHitReact(const FVector& ImpactPoint)
@@ -90,6 +121,38 @@ void ABaseCharacter::DirectionalHitReact(const FVector& ImpactPoint)
 	}
 
 	PlayHitReactMontage(Section);
+}
+
+void ABaseCharacter::PlayHitSound(const FVector& ImpactPoint)
+{
+	if (HitSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			HitSound,
+			ImpactPoint
+		);
+	}
+}
+
+void ABaseCharacter::PlayHitParticles(const FVector& ImpactPoint)
+{
+	if (HitParticles)
+	{
+		UGameplayStatics::SpawnEmitterAtLocation(
+			this,
+			HitParticles,
+			ImpactPoint
+		);
+	}
+}
+
+void ABaseCharacter::HandleDamage(float DamageAmount)
+{
+	if (Attributes)
+	{
+		Attributes->ReveiveDamage(DamageAmount);
+	}
 }
 
 void ABaseCharacter::Tick(float DeltaTime)

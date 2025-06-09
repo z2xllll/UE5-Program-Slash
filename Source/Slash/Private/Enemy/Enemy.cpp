@@ -7,9 +7,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Items/Weapons/Weapon.h"
 #include "Perception/PawnSensingComponent.h"
-#include "Slash/Public/DebugMacros.h"
-#include "Kismet/KismetSystemLibrary.h"
-#include "Kismet/GameplayStatics.h"
 #include "Components/AttributeComponent.h"
 #include "HUD/HealthBarComponent.h"
 #include "AIController.h"
@@ -41,8 +38,10 @@ AEnemy::AEnemy()
 void AEnemy::BeginPlay()
 {
 	Super::BeginPlay();
-	HideHealthBar();
+	HideHealthBar(); //初始隐藏血条
 	EnemyController = Cast<AAIController>(GetController()); //获取AI控制器
+	EnemyState = EEnemyState::EES_Patrolling;
+	if(PatrolTarget)
 	MoveToTarget(PatrolTarget); //开始巡逻
 
 	if (PawnSensing)
@@ -51,6 +50,11 @@ void AEnemy::BeginPlay()
 	}
 	GetCharacterMovement()->MaxWalkSpeed = 150.f;
 
+	SpawnDefaultWeapon();
+}
+
+void AEnemy::SpawnDefaultWeapon()
+{
 	UWorld* World = GetWorld();
 	if (World && WeaponClass)
 	{
@@ -82,21 +86,40 @@ void AEnemy::MoveToTarget(AActor* Target)
 	{
 		FAIMoveRequest MoveRequest;
 		MoveRequest.SetGoalActor(Target); //设置巡逻目标
-		MoveRequest.SetAcceptanceRadius(50.f); //设置接受半径, 20单位
+		MoveRequest.SetAcceptanceRadius(50.f); //设置接受半径
 		EnemyController->MoveTo(MoveRequest); //开始移动到巡逻目标
 	}
 }
 
 void AEnemy::PawnSeen(APawn* SeenPawn)
 {
-	if (EnemyState == EEnemyState::EES_Chasing || EnemyState == EEnemyState::EES_Attacking||EnemyState==EEnemyState::EES_Engaged) return; //如果敌人状态是追击或攻击, 则不处理感知事件
+	if (EnemyState != EEnemyState::EES_Patrolling) return; //如果敌人状态不是巡逻, 则不处理感知事件
 	if (SeenPawn->ActorHasTag(FName("SlashCharacter")))
 	{
-		EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为攻击
+		EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为追击
 		GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
 		CombatTarget = SeenPawn; //设置战斗目标为被感知的角色
 		MoveToTarget(CombatTarget); //移动到战斗目标
 	}
+}
+
+void AEnemy::StartAttackTimer()
+{
+	EnemyState = EEnemyState::EES_Attacking; //设置敌人状态为攻击
+	GetWorldTimerManager().SetTimer(
+		AttackTimer,
+		this,
+		&AEnemy::Attack,
+		AttackWaitTime//攻击计时器
+	);
+}
+
+bool AEnemy::CanAttack()
+{
+	return InTargetRange(CombatTarget, AttackRadius)&&
+		EnemyState != EEnemyState::EES_Attacking
+		&& EnemyState != EEnemyState::EES_Dead
+		&& EnemyState != EEnemyState::EES_Engaged; // 检查是否可以攻击
 }
 
 void AEnemy::PatrolTimerFinished()
@@ -107,29 +130,25 @@ void AEnemy::PatrolTimerFinished()
 void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	if (EnemyState==EEnemyState::EES_Dead) return; //如果敌人已经死亡, 则不执行其他逻辑
+	if (EnemyState==EEnemyState::EES_Dead||EnemyState==EEnemyState::EES_Engaged) return; //如果敌人已经死亡, 则不执行其他逻辑
 
 	if (CombatTarget)
 	{
 		if (!InTargetRange(CombatTarget,CombatRadius)&&EnemyState!=EEnemyState::EES_Patrolling)
 		{
-			StartPatrolling();
+			GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 			HideHealthBar(); //隐藏血条
+			if(EnemyState!=EEnemyState::EES_Engaged)StartPatrolling();
 		}
 		else if(!InTargetRange(CombatTarget,AttackRadius)&&InTargetRange(CombatTarget,CombatRadius)&& EnemyState != EEnemyState::EES_Chasing)
 		{
-			StartChasing();
+			GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 			ShowHealthBar();
+			if (EnemyState != EEnemyState::EES_Engaged)StartChasing();
 		}
-		else if (InTargetRange(CombatTarget, AttackRadius)&&EnemyState!=EEnemyState::EES_Attacking) 
+		else if (CanAttack()) 
 		{
-			if (EnemyController)
-			{
-				EnemyController->StopMovement(); //停止移动
-			}
-			EnemyState = EEnemyState::EES_Attacking; //设置敌人状态为攻击
-			ShowHealthBar(); //显示血条
-			Attack();//执行攻击
+			StartAttackTimer(); //开始攻击计时器
 		}
 	}
 	else if(EnemyState!= EEnemyState::EES_Patrolling)
@@ -188,55 +207,33 @@ void AEnemy::ShowHealthBar()
 	}
 }
 
-void AEnemy::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-}
-
 void AEnemy::GetHit_Implementation(const FVector& ImpactPoint)
 {
-	//DRAW_IMPACTPOINT_SPHERE(ImpactPoint);
-	if (Attributes&&Attributes->IsAlive())
+	if (EnemyState == EEnemyState::EES_Dead) return; //如果敌人已经死亡, 则不处理受击事件
+	ShowHealthBar();
+	if (IsAlive())
 	{
 		DirectionalHitReact(ImpactPoint);
 	}
-	else
-	{
-		//如果敌人已经死亡, 播放死亡动画
-		EnemyState = EEnemyState::EES_Dead; //设置敌人状态为死亡
-		Die();
-	}
+	else Die();
 
+	PlayHitSound(ImpactPoint); //播放受击音效
+	PlayHitParticles(ImpactPoint); //播放受击粒子效果
+	
+}
 
-	if (HitSound)
+void AEnemy::HandleDamage(float DamageAmount)
+{
+	Super::HandleDamage(DamageAmount); //调用父类处理伤害方法
+	if(HealthBarWidget)
 	{
-		UGameplayStatics::PlaySoundAtLocation(
-			this,
-			HitSound,
-			ImpactPoint
-		);
-	}
-	if (HitParticles)
-	{
-		UGameplayStatics::SpawnEmitterAtLocation(
-			this,
-			HitParticles,
-			ImpactPoint
-		);
+		HealthBarWidget->SetHealthPercent(Attributes->GetHealthPercent()); //更新血条百分比
 	}
 }
 
 float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
 {
-	if (Attributes)
-	{
-		Attributes->ReveiveDamage(DamageAmount);
-		if (HealthBarWidget)
-		{
-			HealthBarWidget->SetHealthPercent(Attributes->GetHealthPercent());
-		}
-	}
+	HandleDamage(DamageAmount); //处理伤害
 	CombatTarget = EventInstigator->GetPawn(); //设置战斗目标为攻击者
 	return DamageAmount;
 }
@@ -257,36 +254,20 @@ void AEnemy::Die()
 	if (AnimInstance && DeathMontage)
 	{
 		HideHealthBar(); //隐藏血条
-		AnimInstance->Montage_Play(DeathMontage);
-		AnimInstance->Montage_JumpToSection(FName("Death"),DeathMontage);
+		EnemyState = EEnemyState::EES_Dead; //设置敌人状态为死亡
+		PlayDeathMontage(); //播放死亡动画
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision); //禁用碰撞
 		SetLifeSpan(5.f); //设置生命期, 5秒后销毁
 	}
 }
 void AEnemy::Attack()
 {
+	if (EnemyState == EEnemyState::EES_Dead) return;
+	EnemyState = EEnemyState::EES_Engaged; //设置敌人状态为交战
 	PlayAttackMontage();
 }
 
-void AEnemy::PlayAttackMontage()
+void AEnemy::AttackEnd()
 {
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (AnimInstance)
-	{
-		AnimInstance->Montage_Play(AttackMontage, 1.0f);
-		int32 Selection = FMath::RandRange(1, 2);
-		FName SectionName = FName();
-		switch (Selection)
-		{
-		case 1:
-			SectionName = "Attack1";
-			break;
-		case 2:
-			SectionName = "Attack2";
-			break;
-		default:
-			break;
-		}
-		AnimInstance->Montage_JumpToSection(SectionName, AttackMontage);
-	}
+	EnemyState = EEnemyState::EES_Idle; //设置敌人状态为空闲
 }

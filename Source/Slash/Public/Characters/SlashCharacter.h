@@ -23,8 +23,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-
+	virtual void GetHit_Implementation(const FVector& ImpactPoint) override;
 
 protected:
 	UPROPERTY(BlueprintReadWrite)
@@ -43,6 +42,7 @@ protected:
 	void EKeyPressed();
 	virtual void Attack() override;
 	virtual bool CanAttack() override;
+	virtual void PlayAttackMontage() override;
 
 	void PlayEquipMontage(const FName& SectionName);
 	bool CanDisarm();//ø…“‘–∂œ¬Œ‰∆˜
@@ -51,8 +51,6 @@ protected:
 	/**
 	* Play Montage functions
 	*/
-	virtual void PlayAttackMontage() override;
-
 	virtual void AttackEnd() override;
 
 	UFUNCTION(BlueprintCallable)
@@ -74,11 +72,6 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly)
 	AItem* OverlappingItem;	//Overlapped Item
-
-
-	/*
-	* Animation Montages
-	*/
 
 	UPROPERTY(EditDefaultsOnly, Category = "Montages")
 	UAnimMontage* EquipMontage;

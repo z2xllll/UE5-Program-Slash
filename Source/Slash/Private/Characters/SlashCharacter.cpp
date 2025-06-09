@@ -3,6 +3,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Items/Item.h"
 #include "Items/Weapons/Weapon.h"
 #include "Animation/AnimMontage.h"
@@ -18,6 +19,13 @@ ASlashCharacter::ASlashCharacter()
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;//使角色朝向跟随移动方向改变
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 1000.f, 0.f);//改变旋转速度
+
+	GetMesh()->SetCollisionObjectType(ECC_WorldDynamic);//设置角色网格碰撞类型
+	GetMesh()->SetCollisionResponseToAllChannels(ECR_Ignore);//忽略所有碰撞
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECR_Block);//设置可见性通道为阻挡
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECR_Overlap);//设置世界动态通道为重叠
+	//产生重叠事件
+	GetMesh()->SetGenerateOverlapEvents(true);
 
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(GetRootComponent());
@@ -129,32 +137,6 @@ bool ASlashCharacter::CanArm()
 		&& EquippedWeapon;
 }
 
-void ASlashCharacter::PlayAttackMontage()
-{
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (AnimInstance)
-	{
-		AnimInstance->Montage_Play(AttackMontage,1.6f);
-		int32 Selection = FMath::RandRange(1, 3);
-		FName SectionName = FName();
-		switch (Selection)
-		{
-		case 1:
-			SectionName = "Attack1";
-			break;
-		case 2:
-			SectionName = "Attack2";
-			break;
-		case 3:
-			SectionName = "Attack3";
-			break;
-		default:
-			break;
-		}
-		AnimInstance->Montage_JumpToSection(SectionName, AttackMontage);
-	}
-}
-
 void ASlashCharacter::PlayEquipMontage(const FName& SectionName)
 {
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
@@ -197,6 +179,18 @@ void ASlashCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+}
+
+void ASlashCharacter::PlayAttackMontage()
+{
+	Super::PlayAttackMontage();
+}
+
+void ASlashCharacter::GetHit_Implementation(const FVector& ImpactPoint)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Character %s got hit at %s"), *GetName(), *ImpactPoint.ToString());
+	PlayHitSound(ImpactPoint);//播放受击音效
+	PlayHitParticles(ImpactPoint);//播放受击特效
 }
 
 

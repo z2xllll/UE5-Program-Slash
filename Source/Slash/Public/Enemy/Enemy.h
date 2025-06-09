@@ -14,31 +14,49 @@ class SLASH_API AEnemy : public ABaseCharacter
 
 public:
 	AEnemy();
+	virtual void Tick(float DeltaTime) override;
+
+	/*Hit Reaction*/
+	virtual void GetHit_Implementation(const FVector& ImpactPoint) override;
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+	virtual void Destroyed() override;
+	virtual void Die() override;
+
+	/*State Transform*/
+	void StartChasing();
+	void StartPatrolling();
+	void ShowHealthBar();
+	void HideHealthBar();
 
 protected:
 	virtual void BeginPlay() override;
 
-	void HideHealthBar();
+	void SpawnDefaultWeapon();
 
-
-	bool InTargetRange(AActor* Target,double Radius);
-
-	void MoveToTarget(AActor* Target);
-
+	/*AI Navigation*/
 	UFUNCTION()
 	void PawnSeen(APawn* SeenPawn); // Called when the PawnSensing component detects a pawn
+	bool InTargetRange(AActor* Target,double Radius);
+	void MoveToTarget(AActor* Target);
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadWrite,Category = "AI Navigation")
+	/*Attack */
+	virtual void Attack() override;
+	virtual bool CanAttack() override;
+	virtual void HandleDamage(float DamageAmount) override;
+	virtual void AttackEnd() override;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "AI Navigation")
 	AActor* PatrolTarget;
 
 	UPROPERTY(BlueprintReadOnly)
 	EEnemyState EnemyState = EEnemyState::EES_Patrolling;
 
-	virtual void Attack() override;
-	virtual void PlayAttackMontage() override;
-
 private:
 
+	/*Timer*/
+	FTimerHandle PatrolTimer;
+	void PatrolTimerFinished();
+	void StartAttackTimer();
 
 	UPROPERTY(VisibleAnywhere)
 	class UPawnSensingComponent* PawnSensing;
@@ -58,9 +76,10 @@ private:
 	UPROPERTY(EditAnywhere)
 	double AttackRadius = 150.f;
 
-	/*
-	*Navigation
-	*/
+	FTimerHandle AttackTimer;
+
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	float AttackWaitTime = 0.8f;
 
 	class AAIController* EnemyController;
 
@@ -69,26 +88,5 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	double PatrolRadius = 200.0f;
-
-	FTimerHandle PatrolTimer;
-	void PatrolTimerFinished();
-
-public:	
-	virtual void Tick(float DeltaTime) override;
-
-	void StartChasing();
-
-	void StartPatrolling();
-
-	void ShowHealthBar();
-
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	virtual void GetHit_Implementation(const FVector& ImpactPoint) override;
-
-	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
-
-	virtual void Destroyed() override;
-
-	virtual void Die() override;
 
 };

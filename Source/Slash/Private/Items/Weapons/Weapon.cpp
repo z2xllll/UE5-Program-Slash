@@ -39,19 +39,34 @@ void AWeapon::Equip(USceneComponent* InParent, FName InSocketName,AActor* NewAct
 	SetInstigator(NewInstigater); //设置武器的施法者
 	ItemState = EItemState::EIS_Equipped;
 	AttachMeshToSocket(InParent, InSocketName);
-	if (EquipSound)
+	DisableSphereCollision();
+	PlayEquipSound();
+	DeactivateEmbers();
+}
+
+void AWeapon::DeactivateEmbers()
+{
+	if (EmbersEffect)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, EquipSound, GetActorLocation());
+		//停用火花特效
+		EmbersEffect->Deactivate();
 	}
+}
+
+void AWeapon::DisableSphereCollision()
+{
 	if (Sphere)
 	{
 		Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
-    if (EmbersEffect)
-    {
-		//停用火花特效
-        EmbersEffect->Deactivate();
-    }
+}
+
+void AWeapon::PlayEquipSound()
+{
+	if (EquipSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, EquipSound, GetActorLocation());
+	}
 }
 
 void AWeapon::AttachMeshToSocket(USceneComponent* InParent, const FName& InSocketName)
@@ -61,19 +76,60 @@ void AWeapon::AttachMeshToSocket(USceneComponent* InParent, const FName& InSocke
 	ItemMesh->AttachToComponent(InParent, FATR, InSocketName);
 }
 
-void AWeapon::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
-{	
-	Super::OnSphereBeginOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex, bFromSweep, SweepResult);
-}
-void AWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
-{
-	Super::OnSphereEndOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex);
-}
 
 void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+    // 检查 OtherActor 是否为空
+    if (!OtherActor)
+    {
+        return;
+    }
 
     if (OtherActor->IsA<ATreasure>())
+    {
+        return;
+    }
+
+    FHitResult BoxHit;
+    BoxTrace(BoxHit);
+
+    AActor* HitActor = BoxHit.GetActor();
+
+    // 检查 HitActor 是否为空
+    if (!HitActor)
+    {
+        return;
+    }
+
+	UE_LOG(LogTemp, Warning, TEXT("Hit Actor: %s"), *HitActor->GetName());
+    if (HitActor->IsA<AEnemy>())
+    {
+        // 检查 Instigator 和 Controller 是否为空
+        APawn* InstigatorPawn = GetInstigator();
+        if (InstigatorPawn && InstigatorPawn->GetController())
+        {
+            UGameplayStatics::ApplyDamage(
+                HitActor,
+                Damage,
+                InstigatorPawn->GetController(),
+                this,
+                UDamageType::StaticClass()
+            );
+        }
+    }
+
+    IHitInterface* HitInterface = Cast<IHitInterface>(HitActor);
+    if (HitInterface)
+    {
+        HitInterface->Execute_GetHit(HitActor, BoxHit.ImpactPoint);
+        CreateFields(BoxHit.ImpactPoint);
+    }
+}
+
+void AWeapon::BoxTrace(FHitResult& BoxHit)
+{
+    // 检查组件是否为空
+    if (!BoxTraceStart || !BoxTraceEnd)
     {
         return;
     }
@@ -82,13 +138,16 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
     const FVector End = BoxTraceEnd->GetComponentLocation();
     TArray<AActor*> ActorsToIgnore;
     ActorsToIgnore.AddUnique(this);
-    for(auto &Actor: IgnoreActors)
-    {
-        ActorsToIgnore.AddUnique(Actor);
-	}
 
-    FHitResult BoxHit;
-    bool bHit = UKismetSystemLibrary::BoxTraceSingle(
+    for (auto& Actor : IgnoreActors)
+    {
+        if (Actor) // 检查 Actor 是否为空
+        {
+            ActorsToIgnore.AddUnique(Actor);
+        }
+    }
+
+    UKismetSystemLibrary::BoxTraceSingle(
         this,
         Start,
         End,
@@ -97,41 +156,17 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
         ETraceTypeQuery::TraceTypeQuery1,
         false,
         ActorsToIgnore,
-        EDrawDebugTrace::None, 
+        EDrawDebugTrace::None,
         BoxHit,
         true
     );
 
-        AActor* HitActor = BoxHit.GetActor();
-        bool bAlreadyIgnored = IgnoreActors.Contains(HitActor);
-
-        if (bAlreadyIgnored||HitActor==nullptr)
-        {
-            return; // 如果已经在列表中，直接返回
-        }
-
-		if (HitActor->IsA<AEnemy>())
-		{
-			//如果是敌人，应用伤害
-			UGameplayStatics::ApplyDamage(
-				HitActor,
-				Damage,
-				GetInstigator()->GetController(),
-				this,
-				UDamageType::StaticClass()
-			);
-		}
-
-        IHitInterface* HitInterface = Cast<IHitInterface>(HitActor);
-        if (HitInterface)
-        {
-            HitInterface->Execute_GetHit(HitActor, BoxHit.ImpactPoint);
-        }
-
-        CreateFields(BoxHit.ImpactPoint);
-
-		IgnoreActors.AddUnique(HitActor); // 将击中的Actor添加到忽略列表中
+    // 只有当击中的Actor不为空时才添加到忽略列表
+    AActor* HitActor = BoxHit.GetActor();
+    if (HitActor)
+    {
+        IgnoreActors.AddUnique(HitActor);
+    }
 }
-
 
 
