@@ -80,31 +80,20 @@ void AWeapon::AttachMeshToSocket(USceneComponent* InParent, const FName& InSocke
 void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     // 检查 OtherActor 是否为空
-    if (!OtherActor)
-    {
-        return;
-    }
+    if (!OtherActor)return;
+    if (OtherActor->IsA<ATreasure>())return;
+	if (ActorIsSameType(OtherActor,FName("Enemy")))return;
+	if (ActorIsSameType(OtherActor, FName("SlashCharacter")))return;
 
-    if (OtherActor->IsA<ATreasure>())
-    {
-        return;
-    }
 
     FHitResult BoxHit;
     BoxTrace(BoxHit);
-
     AActor* HitActor = BoxHit.GetActor();
 
     // 检查 HitActor 是否为空
-    if (!HitActor)
-    {
-        return;
-    }
-
-	UE_LOG(LogTemp, Warning, TEXT("Hit Actor: %s"), *HitActor->GetName());
-    if (HitActor->IsA<AEnemy>())
-    {
-        // 检查 Instigator 和 Controller 是否为空
+    if (!HitActor) return;
+    if (ActorIsSameType(HitActor, FName("Enemy")))return;
+    if (ActorIsSameType(HitActor, FName("SlashCharacter")))return;
         APawn* InstigatorPawn = GetInstigator();
         if (InstigatorPawn && InstigatorPawn->GetController())
         {
@@ -116,7 +105,6 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
                 UDamageType::StaticClass()
             );
         }
-    }
 
     IHitInterface* HitInterface = Cast<IHitInterface>(HitActor);
     if (HitInterface)
@@ -126,13 +114,14 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
     }
 }
 
+bool AWeapon::ActorIsSameType(AActor* OtherActor, FName Tag)
+{
+    return GetOwner()->ActorHasTag(Tag) && OtherActor->ActorHasTag(Tag); //同类之间不触发
+}
 void AWeapon::BoxTrace(FHitResult& BoxHit)
 {
     // 检查组件是否为空
-    if (!BoxTraceStart || !BoxTraceEnd)
-    {
-        return;
-    }
+    if (!BoxTraceStart || !BoxTraceEnd)return;
 
     const FVector Start = BoxTraceStart->GetComponentLocation();
     const FVector End = BoxTraceEnd->GetComponentLocation();
@@ -162,11 +151,9 @@ void AWeapon::BoxTrace(FHitResult& BoxHit)
     );
 
     // 只有当击中的Actor不为空时才添加到忽略列表
+	UE_LOG(LogTemp, Warning, TEXT("Box Hit Actor: %s"), *BoxHit.GetActor()->GetName());
     AActor* HitActor = BoxHit.GetActor();
-    if (HitActor)
-    {
-        IgnoreActors.AddUnique(HitActor);
-    }
+    if (HitActor)IgnoreActors.AddUnique(HitActor);
 }
 
 

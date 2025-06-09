@@ -43,6 +43,7 @@ void AEnemy::BeginPlay()
 	EnemyState = EEnemyState::EES_Patrolling;
 	if(PatrolTarget)
 	MoveToTarget(PatrolTarget); //开始巡逻
+	Tags.Add(FName("Enemy")); //添加敌人标签, 方便其他系统识别
 
 	if (PawnSensing)
 	{
@@ -131,7 +132,13 @@ void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	if (EnemyState==EEnemyState::EES_Dead||EnemyState==EEnemyState::EES_Engaged) return; //如果敌人已经死亡, 则不执行其他逻辑
-
+	if(EnemyState!= EEnemyState::EES_Chasing && EnemyState != EEnemyState::EES_Patrolling)
+	{
+		if (EnemyController)
+		{
+			EnemyController->StopMovement();
+		}
+	}
 	if (CombatTarget)
 	{
 		if (!InTargetRange(CombatTarget,CombatRadius)&&EnemyState!=EEnemyState::EES_Patrolling)
@@ -210,6 +217,7 @@ void AEnemy::ShowHealthBar()
 void AEnemy::GetHit_Implementation(const FVector& ImpactPoint)
 {
 	if (EnemyState == EEnemyState::EES_Dead) return; //如果敌人已经死亡, 则不处理受击事件
+	AttackEnd(); //结束攻击状态
 	ShowHealthBar();
 	if (IsAlive())
 	{
@@ -219,7 +227,6 @@ void AEnemy::GetHit_Implementation(const FVector& ImpactPoint)
 
 	PlayHitSound(ImpactPoint); //播放受击音效
 	PlayHitParticles(ImpactPoint); //播放受击粒子效果
-	
 }
 
 void AEnemy::HandleDamage(float DamageAmount)
@@ -270,4 +277,5 @@ void AEnemy::Attack()
 void AEnemy::AttackEnd()
 {
 	EnemyState = EEnemyState::EES_Idle; //设置敌人状态为空闲
+	EquippedWeapon->IgnoreActors.Empty();//清空忽略的角色列表
 }
