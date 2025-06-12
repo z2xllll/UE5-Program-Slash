@@ -186,9 +186,8 @@ void ASlashCharacter::PlayAttackMontage()
 	Super::PlayAttackMontage();
 }
 
-void ASlashCharacter::GetHit_Implementation(const FVector& ImpactPoint)
+void ASlashCharacter::GetHit_Implementation(const FVector& ImpactPoint, AActor* Hitter)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Character %s got hit at %s"), *GetName(), *ImpactPoint.ToString());
 	PlayHitSound(ImpactPoint);//播放受击音效
 	PlayHitParticles(ImpactPoint);//播放受击特效
 }

@@ -17,7 +17,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	/*Hit Reaction*/
-	virtual void GetHit_Implementation(const FVector& ImpactPoint) override;
+	virtual void GetHit_Implementation(const FVector& ImpactPoint,AActor* Hitter) override;
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 	virtual void Destroyed() override;
 	virtual void Die() override;
@@ -44,12 +44,17 @@ protected:
 	virtual bool CanAttack() override;
 	virtual void HandleDamage(float DamageAmount) override;
 	virtual void AttackEnd() override;
+	UFUNCTION(BlueprintCallable, Category = "Attack")
+	void AttackEndState();
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "AI Navigation")
 	AActor* PatrolTarget;
 
 	UPROPERTY(BlueprintReadOnly)
 	EEnemyState EnemyState = EEnemyState::EES_Patrolling;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	AActor* CombatTarget;
 
 private:
 
@@ -67,8 +72,6 @@ private:
 	UPROPERTY(VisibleAnywhere)
 	class UHealthBarComponent* HealthBarWidget;
 
-	UPROPERTY()
-	AActor* CombatTarget;
 
 	UPROPERTY(EditAnywhere)
 	double CombatRadius = 500.0f;
@@ -79,7 +82,7 @@ private:
 	FTimerHandle AttackTimer;
 
 	UPROPERTY(EditAnywhere, Category = "Combat")
-	float AttackWaitTime = 0.8f;
+	float AttackWaitTime = 1.f;
 
 	class AAIController* EnemyController;
 

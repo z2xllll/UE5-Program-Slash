@@ -40,7 +40,7 @@ void ABreakableActor::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 }
-void ABreakableActor::GetHit_Implementation(const FVector& ImpactPoint)  
+void ABreakableActor::GetHit_Implementation(const FVector& ImpactPoint, AActor* Hitter)
 {  
 	if (IsBroken)return;//如果已经破坏了就不再处理
 	IsBroken = true; //设置为已破坏状态

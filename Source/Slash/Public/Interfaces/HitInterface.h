@@ -25,5 +25,5 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent)
 	//一旦设置成 BlueprintNativeEvent，不能把函数设置成vitual了
-	void GetHit(const FVector& ImpactPoint);
+	void GetHit(const FVector& ImpactPoint,AActor* Hitter);
 };

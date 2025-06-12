@@ -32,7 +32,7 @@ AEnemy::AEnemy()
 
 	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
 	PawnSensing->SetPeripheralVisionAngle(45.f); //设置感知角度为90度
-	PawnSensing->SightRadius = 4000.f; //设置感知半径为1000单位
+	PawnSensing->SightRadius = 2000.f; //设置感知半径为1000单位
 }
 
 void AEnemy::BeginPlay()
@@ -41,6 +41,7 @@ void AEnemy::BeginPlay()
 	HideHealthBar(); //初始隐藏血条
 	EnemyController = Cast<AAIController>(GetController()); //获取AI控制器
 	EnemyState = EEnemyState::EES_Patrolling;
+	GetCharacterMovement()->MaxWalkSpeed = 150.f;
 	if(PatrolTarget)
 	MoveToTarget(PatrolTarget); //开始巡逻
 	Tags.Add(FName("Enemy")); //添加敌人标签, 方便其他系统识别
@@ -49,7 +50,6 @@ void AEnemy::BeginPlay()
 	{
 		PawnSensing->OnSeePawn.AddDynamic(this, &AEnemy::PawnSeen); //绑定感知事件
 	}
-	GetCharacterMovement()->MaxWalkSpeed = 150.f;
 
 	SpawnDefaultWeapon();
 }
@@ -67,10 +67,7 @@ void AEnemy::SpawnDefaultWeapon()
 
 void AEnemy::HideHealthBar()
 {
-	if (HealthBarWidget)
-	{
-		HealthBarWidget->SetVisibility(false); //初始隐藏血条
-	}
+	if (HealthBarWidget)HealthBarWidget->SetVisibility(false); //初始隐藏血条
 }
 
 bool AEnemy::InTargetRange(AActor* Target,double Radius)
@@ -82,30 +79,32 @@ bool AEnemy::InTargetRange(AActor* Target,double Radius)
 
 void AEnemy::MoveToTarget(AActor* Target)
 {
-	if (!Target) return; //如果目标为空, 则返回
+	if (!Target||EnemyState==EEnemyState::EES_Engaged||EnemyState==EEnemyState::EES_Attacking) return; //如果目标为空, 则返回
 	if (EnemyController)
 	{
 		FAIMoveRequest MoveRequest;
 		MoveRequest.SetGoalActor(Target); //设置巡逻目标
-		MoveRequest.SetAcceptanceRadius(50.f); //设置接受半径
+		MoveRequest.SetAcceptanceRadius(40.f); //设置接受半径
 		EnemyController->MoveTo(MoveRequest); //开始移动到巡逻目标
 	}
 }
 
 void AEnemy::PawnSeen(APawn* SeenPawn)
 {
-	if (EnemyState != EEnemyState::EES_Patrolling) return; //如果敌人状态不是巡逻, 则不处理感知事件
+	if (EnemyState != EEnemyState::EES_Patrolling)return; //如果敌人状态不是巡逻, 则不处理感知事件
 	if (SeenPawn->ActorHasTag(FName("SlashCharacter")))
 	{
-		EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为追击
-		GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
 		CombatTarget = SeenPawn; //设置战斗目标为被感知的角色
-		MoveToTarget(CombatTarget); //移动到战斗目标
 	}
 }
 
 void AEnemy::StartAttackTimer()
 {
+	GetCharacterMovement()->MaxWalkSpeed = 0.f;
+	if (EnemyController)
+	{
+		EnemyController->StopMovement(); // 立即停止当前移动
+	}
 	EnemyState = EEnemyState::EES_Attacking; //设置敌人状态为攻击
 	GetWorldTimerManager().SetTimer(
 		AttackTimer,
@@ -120,7 +119,7 @@ bool AEnemy::CanAttack()
 	return InTargetRange(CombatTarget, AttackRadius)&&
 		EnemyState != EEnemyState::EES_Attacking
 		&& EnemyState != EEnemyState::EES_Dead
-		&& EnemyState != EEnemyState::EES_Engaged; // 检查是否可以攻击
+		&&EnemyState!= EEnemyState::EES_Engaged; // 检查是否可以攻击
 }
 
 void AEnemy::PatrolTimerFinished()
@@ -130,65 +129,49 @@ void AEnemy::PatrolTimerFinished()
 
 void AEnemy::Tick(float DeltaTime)
 {
+	//打印状态
+	//UE_LOG(LogTemp, Warning, TEXT("Enemy State: %s"), *UEnum::GetValueAsString(EnemyState));
 	Super::Tick(DeltaTime);
-	if (EnemyState==EEnemyState::EES_Dead||EnemyState==EEnemyState::EES_Engaged) return; //如果敌人已经死亡, 则不执行其他逻辑
-	if(EnemyState!= EEnemyState::EES_Chasing && EnemyState != EEnemyState::EES_Patrolling)
+	if (EnemyState==EEnemyState::EES_Dead) return; //如果敌人已经死亡, 则不执行其他逻辑
+	if (EnemyState == EEnemyState::EES_Attacking && !InTargetRange(CombatTarget, AttackRadius))
 	{
-		if (EnemyController)
-		{
-			EnemyController->StopMovement();
-		}
+		GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 	}
+
 	if (CombatTarget)
 	{
-		if (!InTargetRange(CombatTarget,CombatRadius)&&EnemyState!=EEnemyState::EES_Patrolling)
+		if (!InTargetRange(CombatTarget,CombatRadius))
 		{
+			//清空攻击计时器
 			GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 			HideHealthBar(); //隐藏血条
-			if(EnemyState!=EEnemyState::EES_Engaged)StartPatrolling();
+			StartPatrolling();
 		}
-		else if(!InTargetRange(CombatTarget,AttackRadius)&&InTargetRange(CombatTarget,CombatRadius)&& EnemyState != EEnemyState::EES_Chasing)
+		else if(!InTargetRange(CombatTarget,AttackRadius)&&InTargetRange(CombatTarget,CombatRadius))
 		{
+			GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
+			//清空攻击计时器
 			GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 			ShowHealthBar();
-			if (EnemyState != EEnemyState::EES_Engaged)StartChasing();
+			StartChasing();
 		}
 		else if (CanAttack()) 
 		{
+			GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
+			GetCharacterMovement()->MaxWalkSpeed = 0.f;
+			ShowHealthBar();
 			StartAttackTimer(); //开始攻击计时器
 		}
 	}
-	else if(EnemyState!= EEnemyState::EES_Patrolling)
+	else
 	{
 		StartPatrolling(); //如果没有战斗目标, 则开始巡逻
 		HideHealthBar(); //隐藏血条
-	}
-	if (EnemyState == EEnemyState::EES_Patrolling)
-	{
-		if (PatrolTargets.Num() == 0) return;
-
-		// 检查是否需要选择新的巡逻目标
-		if ((!PatrolTarget || !GetWorldTimerManager().IsTimerActive(PatrolTimer))&& !(EnemyController->GetMoveStatus() == EPathFollowingStatus::Moving))
-		{
-			const int32 TargetIndex = FMath::RandRange(0, PatrolTargets.Num() - 1);
-			PatrolTarget = PatrolTargets[TargetIndex];
-			GetWorldTimerManager().SetTimer(
-				PatrolTimer,
-				this,
-				&AEnemy::PatrolTimerFinished,
-				2.f
-			);
-
-		}
 	}
 }
 
 void AEnemy::StartChasing()
 {
-	if (EnemyController)
-	{
-		EnemyController->StopMovement();
-	}
 	EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为追击
 	GetCharacterMovement()->MaxWalkSpeed = 300.f; // 设置追击速度
 	MoveToTarget(CombatTarget); //移动到战斗目标
@@ -196,46 +179,54 @@ void AEnemy::StartChasing()
 
 void AEnemy::StartPatrolling()
 {
-	if (EnemyController)
-	{
-		EnemyController->StopMovement();
-	}
 	CombatTarget = nullptr; 
 	EnemyState = EEnemyState::EES_Patrolling; 
 	GetCharacterMovement()->MaxWalkSpeed = 150.f; 
-	MoveToTarget(PatrolTarget);
+	if (PatrolTargets.Num() == 0) return;
+	// 检查是否需要选择新的巡逻目标,不在移动中
+	if ((!PatrolTarget || !GetWorldTimerManager().IsTimerActive(PatrolTimer))&&GetVelocity().Size() <= 5.0f)
+	{
+		const int32 TargetIndex = FMath::RandRange(0, PatrolTargets.Num() - 1);
+		PatrolTarget = PatrolTargets[TargetIndex];
+		GetWorldTimerManager().SetTimer(
+			PatrolTimer,
+			this,
+			&AEnemy::PatrolTimerFinished,
+			3.f
+		);
+
+	}
+	else 
+	{
+		MoveToTarget(PatrolTarget); //如果巡逻目标存在, 则移动到巡逻目标
+	}
 }
 
 void AEnemy::ShowHealthBar()
 {
-	if (HealthBarWidget)
-	{
-		HealthBarWidget->SetVisibility(true); //显示血条
-	}
+	if (HealthBarWidget)HealthBarWidget->SetVisibility(true); //显示血条
 }
 
-void AEnemy::GetHit_Implementation(const FVector& ImpactPoint)
+void AEnemy::GetHit_Implementation(const FVector& ImpactPoint, AActor* Hitter)
 {
 	if (EnemyState == EEnemyState::EES_Dead) return; //如果敌人已经死亡, 则不处理受击事件
 	AttackEnd(); //结束攻击状态
+	GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
+	EnemyState = EEnemyState::EES_Idle; //设置敌人状态为空闲
 	ShowHealthBar();
-	if (IsAlive())
-	{
-		DirectionalHitReact(ImpactPoint);
-	}
-	else Die();
-
 	PlayHitSound(ImpactPoint); //播放受击音效
 	PlayHitParticles(ImpactPoint); //播放受击粒子效果
+	if (IsAlive()&&Hitter)
+	{
+		DirectionalHitReact(Hitter->GetActorLocation());
+	}
+	else Die();
 }
 
 void AEnemy::HandleDamage(float DamageAmount)
 {
 	Super::HandleDamage(DamageAmount); //调用父类处理伤害方法
-	if(HealthBarWidget)
-	{
-		HealthBarWidget->SetHealthPercent(Attributes->GetHealthPercent()); //更新血条百分比
-	}
+	if(HealthBarWidget)HealthBarWidget->SetHealthPercent(Attributes->GetHealthPercent()); //更新血条百分比
 }
 
 float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
@@ -248,10 +239,7 @@ float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEv
 
 void AEnemy::Destroyed()
 {
-	if (EquippedWeapon)
-	{
-		EquippedWeapon->Destroy();
-	}
+	if (EquippedWeapon)EquippedWeapon->Destroy();
 }
 
 void AEnemy::Die()
@@ -271,11 +259,20 @@ void AEnemy::Attack()
 {
 	if (EnemyState == EEnemyState::EES_Dead) return;
 	EnemyState = EEnemyState::EES_Engaged; //设置敌人状态为交战
+	GetCharacterMovement()->MaxWalkSpeed = 0.f;
+	if (EnemyController)
+	{
+		EnemyController->StopMovement(); // 立即停止当前移动
+	}
 	PlayAttackMontage();
 }
 
 void AEnemy::AttackEnd()
 {
-	EnemyState = EEnemyState::EES_Idle; //设置敌人状态为空闲
 	EquippedWeapon->IgnoreActors.Empty();//清空忽略的角色列表
+}
+
+void AEnemy::AttackEndState()
+{
+	EnemyState = EEnemyState::EES_Idle; //设置敌人状态为空闲
 }
