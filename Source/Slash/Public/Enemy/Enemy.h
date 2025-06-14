@@ -44,6 +44,10 @@ protected:
 	virtual bool CanAttack() override;
 	virtual void HandleDamage(float DamageAmount) override;
 	virtual void AttackEnd() override;
+	UFUNCTION(BlueprintCallable)
+	FVector GetRotationWarpTarget();
+	UFUNCTION(BlueprintCallable)
+	FVector GetTranslationWarpTarget();
 	UFUNCTION(BlueprintCallable, Category = "Attack")
 	void AttackEndState();
 
@@ -55,6 +59,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	AActor* CombatTarget;
+
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	double WarpTargetDistance = 80.0f; // Distance to warp the target for attack
 
 private:
 

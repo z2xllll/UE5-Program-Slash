@@ -25,6 +25,8 @@ void UAttributeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 
 void UAttributeComponent::ReveiveDamage(float Damage)
 {
+	//´òÓ¡ÑªÁ¿
+	//UE_LOG(LogTemp, Warning, TEXT("Health before damage: %f"), Health);
 	Health = Health - Damage > 0 ? Health - Damage : 0.f; // Ensure health does not go below zero
 }
 

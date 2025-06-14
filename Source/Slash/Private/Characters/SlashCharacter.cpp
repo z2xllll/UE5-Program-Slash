@@ -3,11 +3,15 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/AttributeComponent.h"
 #include "Items/Item.h"
 #include "Items/Weapons/Weapon.h"
 #include "Animation/AnimMontage.h"
 #include "Components/BoxComponent.h"
+#include "HUD/SlashHUD.h"
+#include "HUD/SlashOverlay.h"
 
 ASlashCharacter::ASlashCharacter()
 {
@@ -40,7 +44,30 @@ ASlashCharacter::ASlashCharacter()
 void ASlashCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	UE_LOG(LogTemp, Warning, TEXT("ASlashCharacter::BeginPlay called."));
 	Tags.Add(FName("SlashCharacter"));//添加标签，方便检测角色类型
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	InitializeSlashOverlay(PlayerController);
+}
+
+void ASlashCharacter::InitializeSlashOverlay(APlayerController* PlayerController)
+{
+	if (PlayerController)
+	{
+		ASlashHUD* SlashHUD = Cast<ASlashHUD>(PlayerController->GetHUD());
+		if (SlashHUD)
+		{
+			SlashOverlay = SlashHUD->GetSlashOverlay();
+			if (SlashOverlay && Attributes)
+			{
+				SlashOverlay->SetHealthPercent(Attributes->GetHealthPercent());//设置血条百分比
+				SlashOverlay->SetStaminaPercent(1.f);//设置耐力条百分比
+				SlashOverlay->SetGoldAmount(100);//设置金币数量
+				SlashOverlay->SetSoulAmount(0);//设置灵魂数量
+			}
+		}
+	}
 }
 
 void ASlashCharacter::MoveForward(float Value)
@@ -190,6 +217,11 @@ void ASlashCharacter::GetHit_Implementation(const FVector& ImpactPoint, AActor* 
 {
 	PlayHitSound(ImpactPoint);//播放受击音效
 	PlayHitParticles(ImpactPoint);//播放受击特效
+	if (IsAlive() && Hitter)
+	{
+		//DirectionalHitReact(Hitter->GetActorLocation());
+	}
+	else Die();
 }
 
 
@@ -207,5 +239,37 @@ void ASlashCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	PlayerInputComponent->BindAction(FName("Attack"), IE_Pressed, this, &ASlashCharacter::Attack);
 }
 
+float ASlashCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
+{
+	//UE_LOG(LogTemp, Warning, TEXT("ASlashCharacter::TakeDamage called with DamageAmount: %f"), DamageAmount);
+	HandleDamage(DamageAmount); //处理伤害
+	if (SlashOverlay)
+	{
+		SlashOverlay->SetHealthPercent(Attributes->GetHealthPercent()); //更新血条百分比
+	}
+	return DamageAmount;
+}
 
+void ASlashCharacter::HandleDamage(float DamageAmount)
+{
+	Super::HandleDamage(DamageAmount); //调用父类处理伤害方法
+}
 
+void ASlashCharacter::Destroyed()
+{
+	if (EquippedWeapon)EquippedWeapon->Destroy();
+}
+
+void ASlashCharacter::Die()
+{
+	//播放死亡动画
+	Tags.Add(FName("Dead")); //添加标签，方便检测角色是否死亡
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && DeathMontage)
+	{
+		CharacterState = ECharacterState::ECS_Dead; //设置角色状态为死亡
+		PlayDeathMontage(); //播放死亡动画
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision); //禁用碰撞
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision); //禁用网格碰撞
+	}
+}

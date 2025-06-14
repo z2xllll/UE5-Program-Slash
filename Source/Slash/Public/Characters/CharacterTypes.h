@@ -3,6 +3,7 @@ UENUM(BlueprintType)//在蓝图中当类型使用
 enum class ECharacterState : uint8
 {
 	ECS_Unequipped UMETA(DisplayName = "Unequipped"),//更改在蓝图中名称
+	ECS_Dead UMETA(DisplayName = "Dead"),
 	ECS_EquippedOneHandedWeapon UMETA(DisplayName = "Equipped One-Handed Weapon"),
 	ECS_EquippedTwoHandedWeapon UMETA(DisplayName = "Equipped Two-Handed Weapon")
 };

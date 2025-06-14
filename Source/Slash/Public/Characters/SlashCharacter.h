@@ -24,6 +24,7 @@ public:
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetHit_Implementation(const FVector& ImpactPoint,AActor* Hitter) override;
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
 protected:
 	UPROPERTY(BlueprintReadWrite)
@@ -32,6 +33,7 @@ protected:
 	ECharacterState CharacterState = ECharacterState::ECS_Unequipped;
 
 	virtual void BeginPlay() override;
+	void InitializeSlashOverlay(APlayerController* PlayerController);
 	/**
 	* Callbacks for input
 	*/
@@ -43,6 +45,7 @@ protected:
 	virtual void Attack() override;
 	virtual bool CanAttack() override;
 	virtual void PlayAttackMontage() override;
+	virtual void HandleDamage(float DamageAmount) override;
 
 	void PlayEquipMontage(const FName& SectionName);
 	bool CanDisarm();//可以卸下武器
@@ -52,6 +55,8 @@ protected:
 	* Play Montage functions
 	*/
 	virtual void AttackEnd() override;
+	virtual void Destroyed() override;
+	virtual void Die() override;
 
 	UFUNCTION(BlueprintCallable)
 	void Arm();
@@ -75,6 +80,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Montages")
 	UAnimMontage* EquipMontage;
+
+	UPROPERTY()
+	class USlashOverlay* SlashOverlay;
 
 public:
 	//强制内联

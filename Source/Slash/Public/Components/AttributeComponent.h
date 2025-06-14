@@ -30,6 +30,8 @@ private:
 
 public:
 	void ReveiveDamage(float Damage);
-	FORCEINLINE float GetHealthPercent() const { return MaxHealth!=0?Health / MaxHealth:0.f; }
+	FORCEINLINE float GetHealthPercent() const { 
+		UE_LOG(LogTemp, Warning, TEXT("Health: %f, MaxHealth: %f"), Health, MaxHealth);
+		return MaxHealth!=0?Health / MaxHealth:0.f; }
 	FORCEINLINE bool IsAlive() const { return Health > 0.f; }
 };

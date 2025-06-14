@@ -151,6 +151,7 @@ void ABaseCharacter::HandleDamage(float DamageAmount)
 {
 	if (Attributes)
 	{
+		//UE_LOG(LogTemp, Warning, TEXT("HandleDamage: %f"), DamageAmount);
 		Attributes->ReveiveDamage(DamageAmount);
 	}
 }

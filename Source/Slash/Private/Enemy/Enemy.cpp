@@ -92,7 +92,7 @@ void AEnemy::MoveToTarget(AActor* Target)
 void AEnemy::PawnSeen(APawn* SeenPawn)
 {
 	if (EnemyState != EEnemyState::EES_Patrolling)return; //如果敌人状态不是巡逻, 则不处理感知事件
-	if (SeenPawn->ActorHasTag(FName("SlashCharacter")))
+	if (SeenPawn->ActorHasTag(FName("SlashCharacter"))&&!SeenPawn->ActorHasTag(FName("Dead")))
 	{
 		CombatTarget = SeenPawn; //设置战斗目标为被感知的角色
 	}
@@ -133,25 +133,16 @@ void AEnemy::Tick(float DeltaTime)
 	//UE_LOG(LogTemp, Warning, TEXT("Enemy State: %s"), *UEnum::GetValueAsString(EnemyState));
 	Super::Tick(DeltaTime);
 	if (EnemyState==EEnemyState::EES_Dead) return; //如果敌人已经死亡, 则不执行其他逻辑
-	if (EnemyState == EEnemyState::EES_Attacking && !InTargetRange(CombatTarget, AttackRadius))
-	{
-		GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
-	}
-
 	if (CombatTarget)
 	{
 		if (!InTargetRange(CombatTarget,CombatRadius))
 		{
-			//清空攻击计时器
-			GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 			HideHealthBar(); //隐藏血条
 			StartPatrolling();
 		}
 		else if(!InTargetRange(CombatTarget,AttackRadius)&&InTargetRange(CombatTarget,CombatRadius))
 		{
 			GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
-			//清空攻击计时器
-			GetWorldTimerManager().ClearTimer(AttackTimer); //清除攻击计时器
 			ShowHealthBar();
 			StartChasing();
 		}
@@ -258,6 +249,11 @@ void AEnemy::Die()
 void AEnemy::Attack()
 {
 	if (EnemyState == EEnemyState::EES_Dead) return;
+	if (CombatTarget && CombatTarget->ActorHasTag(FName("Dead")))
+	{
+		CombatTarget = nullptr; //如果战斗目标已经死亡, 则清空战斗目标
+		return;
+	}
 	EnemyState = EEnemyState::EES_Engaged; //设置敌人状态为交战
 	GetCharacterMovement()->MaxWalkSpeed = 0.f;
 	if (EnemyController)
@@ -270,6 +266,22 @@ void AEnemy::Attack()
 void AEnemy::AttackEnd()
 {
 	EquippedWeapon->IgnoreActors.Empty();//清空忽略的角色列表
+}
+
+FVector AEnemy::GetRotationWarpTarget()
+{
+	if (CombatTarget == nullptr)return FVector();
+	const FVector TargetLocation = CombatTarget->GetActorLocation();
+	const FVector EnemyLocation = GetActorLocation();
+
+	FVector Direction = (TargetLocation - EnemyLocation).GetSafeNormal(); //获取目标方向
+	return TargetLocation - Direction * WarpTargetDistance; //被攻击者位置-方向*距离
+}
+
+FVector AEnemy::GetTranslationWarpTarget()
+{
+	if (CombatTarget)return CombatTarget->GetActorLocation();
+	return FVector();
 }
 
 void AEnemy::AttackEndState()
