@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "CharacterTypes.h"
 #include "BaseCharacter.h"
+#include "Interfaces/PickupInterface.h"
 #include "SlashCharacter.generated.h"
 
 
@@ -11,9 +12,10 @@ class USpringArmComponent;
 class UCameraComponent;
 class AItem;
 class UAnimMontage;
+class ASoul;
 
 UCLASS()
-class SLASH_API ASlashCharacter : public ABaseCharacter
+class SLASH_API ASlashCharacter : public ABaseCharacter, public IPickupInterface
 {
 	GENERATED_BODY()
 
@@ -25,6 +27,10 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetHit_Implementation(const FVector& ImpactPoint,AActor* Hitter) override;
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
+	virtual void SetOverlappingItem(AItem* Item) override;
+	virtual void AddSouls(ASoul* Soul) override;
+	virtual void AddGold(ATreasure* Treasure) override;
 
 protected:
 	UPROPERTY(BlueprintReadWrite)
@@ -42,9 +48,11 @@ protected:
 	void LookUp(float Value);
 	void MoveRight(float Value);
 	void EKeyPressed();
+	void DodgeKeyPressed();
 	virtual void Attack() override;
 	virtual bool CanAttack() override;
 	virtual void PlayAttackMontage() override;
+	virtual void PlayDodgeMontage();
 	virtual void HandleDamage(float DamageAmount) override;
 
 	void PlayEquipMontage(const FName& SectionName);
@@ -67,6 +75,9 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void FinishedEquip();
 
+	UFUNCTION(BlueprintCallable)
+	void DodgeEnd();
+
 private:
 
 	UPROPERTY(VisibleAnywhere)
@@ -81,12 +92,14 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Montages")
 	UAnimMontage* EquipMontage;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Montages")
+	UAnimMontage* DodgeMontage;
+
 	UPROPERTY()
 	class USlashOverlay* SlashOverlay;
 
 public:
-	//强制内联
-	FORCEINLINE void SetOverlappingItem(AItem* Item) { OverlappingItem = Item; }
 	//允许外部访问 
 	FORCEINLINE ECharacterState GetCharacterState() const { return CharacterState; }
+	
 };

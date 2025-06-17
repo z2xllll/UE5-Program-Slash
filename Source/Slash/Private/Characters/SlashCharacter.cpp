@@ -7,6 +7,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/AttributeComponent.h"
 #include "Items/Item.h"
+#include "Items/Soul.h"
+#include "Items/Treasure.h"
 #include "Items/Weapons/Weapon.h"
 #include "Animation/AnimMontage.h"
 #include "Components/BoxComponent.h"
@@ -135,6 +137,11 @@ void ASlashCharacter::EKeyPressed()
 	}
 }
 
+void ASlashCharacter::DodgeKeyPressed()
+{
+	PlayDodgeMontage();
+}
+
 void ASlashCharacter::Attack()
 {
 	if(CanAttack())
@@ -201,11 +208,20 @@ void ASlashCharacter::FinishedEquip()
 	ActionState = EActionState::EAS_Unoccupied;
 }
 
+void ASlashCharacter::DodgeEnd()
+{
+	ActionState = EActionState::EAS_Unoccupied; //闪避结束，设置状态为空闲
+}
+
 
 void ASlashCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
+	if (Attributes && SlashOverlay)
+	{
+		Attributes->UpdateStamina(DeltaTime); //更新耐力值
+		SlashOverlay->SetStaminaPercent(Attributes->GetStaminaPercent()); //更新耐力条百分比
+	}
 }
 
 void ASlashCharacter::PlayAttackMontage()
@@ -213,13 +229,31 @@ void ASlashCharacter::PlayAttackMontage()
 	Super::PlayAttackMontage();
 }
 
+void ASlashCharacter::PlayDodgeMontage()
+{
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (ActionState != EActionState::EAS_Unoccupied) return; //如果当前状态不是空闲状态，则不执行闪避动作
+	if (Attributes && Attributes->GetStaminaPercent() <= 0.f) return; //如果耐力值小于等于0，则不执行闪避动作
+	if (AnimInstance && DodgeMontage)
+	{
+		ActionState = EActionState::EAS_Dodging; //设置当前状态为闪避中
+		AnimInstance->Montage_Play(DodgeMontage,1.5f);
+		if(Attributes)
+		{
+			Attributes->UseStamina(20.f); //消耗耐力
+		}
+	}
+}
+
 void ASlashCharacter::GetHit_Implementation(const FVector& ImpactPoint, AActor* Hitter)
 {
 	PlayHitSound(ImpactPoint);//播放受击音效
 	PlayHitParticles(ImpactPoint);//播放受击特效
+	AttackEnd(); //结束攻击状态
+	ActionState = EActionState::EAS_Unoccupied; //设置当前状态为空闲状态
 	if (IsAlive() && Hitter)
 	{
-		//DirectionalHitReact(Hitter->GetActorLocation());
+		DirectionalHitReact(Hitter->GetActorLocation());
 	}
 	else Die();
 }
@@ -237,6 +271,7 @@ void ASlashCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	PlayerInputComponent->BindAction(FName("Jump"), IE_Pressed, this, &ACharacter::Jump);
 	PlayerInputComponent->BindAction(FName("Equip"), IE_Pressed, this, &ASlashCharacter::EKeyPressed);
 	PlayerInputComponent->BindAction(FName("Attack"), IE_Pressed, this, &ASlashCharacter::Attack);
+	PlayerInputComponent->BindAction(FName("Dodge"), IE_Pressed, this, &ASlashCharacter::DodgeKeyPressed);
 }
 
 float ASlashCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
@@ -248,6 +283,29 @@ float ASlashCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const&
 		SlashOverlay->SetHealthPercent(Attributes->GetHealthPercent()); //更新血条百分比
 	}
 	return DamageAmount;
+}
+
+void ASlashCharacter::SetOverlappingItem(AItem* Item)
+{
+	OverlappingItem = Item; //设置重叠物品
+}
+
+void ASlashCharacter::AddSouls(ASoul* Soul)
+{
+	if (Attributes&&SlashOverlay)
+	{
+		Attributes->AddSouls(Soul->GetSouls());
+		SlashOverlay->SetSoulAmount(Attributes->GetSouls());
+	}
+}
+
+void ASlashCharacter::AddGold(ATreasure* Treasure)
+{
+	if (Attributes&&SlashOverlay)
+	{
+		Attributes->AddGold(Treasure->GetGold());
+		SlashOverlay->SetGoldAmount(Attributes->GetGold());
+	}
 }
 
 void ASlashCharacter::HandleDamage(float DamageAmount)
@@ -273,3 +331,4 @@ void ASlashCharacter::Die()
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision); //禁用网格碰撞
 	}
 }
+

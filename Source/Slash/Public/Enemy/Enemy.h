@@ -22,6 +22,8 @@ public:
 	virtual void Destroyed() override;
 	virtual void Die() override;
 
+	void SpawnSoul();
+
 	/*State Transform*/
 	void StartChasing();
 	void StartPatrolling();
@@ -98,5 +100,8 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	double PatrolRadius = 200.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	TSubclassOf<class ASoul>SoulClass;
 
 };

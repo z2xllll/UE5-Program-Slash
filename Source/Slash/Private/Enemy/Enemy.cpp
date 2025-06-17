@@ -6,6 +6,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Items/Weapons/Weapon.h"
+#include "Items/Soul.h"
 #include "Perception/PawnSensingComponent.h"
 #include "Components/AttributeComponent.h"
 #include "HUD/HealthBarComponent.h"
@@ -244,6 +245,22 @@ void AEnemy::Die()
 		PlayDeathMontage(); //播放死亡动画
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision); //禁用碰撞
 		SetLifeSpan(5.f); //设置生命期, 5秒后销毁
+		FTimerHandle SoulSpawnTimer;
+		UWorld* World = GetWorld();
+		if(World)
+			World->GetTimerManager().SetTimer(SoulSpawnTimer, this, &AEnemy::SpawnSoul, 2.f, false); //2秒后生成灵魂
+		
+	}
+}
+void AEnemy::SpawnSoul()
+{
+	UWorld* World = GetWorld();
+	if (World && SoulClass)
+	{
+		const FVector SpawnLocation = GetActorLocation() + FVector(0.f, 0.f, 50.f); //生成位置在敌人上方
+		ASoul* SpawnSoul = World->SpawnActor<ASoul>(SoulClass, SpawnLocation, FRotator::ZeroRotator); //生成灵魂
+		if (!SpawnSoul) return; //如果生成失败, 则返回
+		SpawnSoul->SetSouls(Attributes->GetSouls()); //设置灵魂数量
 	}
 }
 void AEnemy::Attack()
